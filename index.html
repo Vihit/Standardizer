@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+  <head lang="en">
+    <meta charset="UTF-8" />
+    <title></title>
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css"
+      integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB"
+      crossorigin="anonymous"
+    />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    <script type="text/javascript" src="vkbeautify.js"></script>
+  </head>
+  <body>
+    <input id="myFile" type="file" />
+    <!--<textarea id="myTextArea" style="width: 47%;"></textarea>-->
+    <button id="myBtn">Try it</button>
+    <div
+      id="buttons"
+      style="text-align: center; position: fixed;width:100%;height:500px;margin: auto;top: 50%;"
+    >
+      <div><button id="asIs" style="margin: 10px 10px 10px 10px;">As-is</button></div>
+      <div>
+        <button id="remove">-</button>
+        <button id="edit">E</button>
+        <button id="add">+</button>
+      </div>
+    </div>
+    <div style="width: 100%">
+      <div id="rawXml" style="display: inline-block;width: 45%;"></div>
+      <div
+        style="display: inline-block;width: 9.34%;height:100%;text-align: center;"
+      ></div>
+
+      <div id="outputXml" style="display: inline-block;width: 45%;"></div>
+    </div>
+    <script language="JavaScript">
+      var currentLine = 0;
+      var xmlObject = null;
+      var xsltObject = null;
+      var currentNode = null;
+      var currentXpath = "";
+      var currentValueXpath = "";
+      var currentXsltNode = null;
+
+      document.getElementById("myBtn").addEventListener("click", function() {
+        var div = document.getElementById("rawXml");
+        var outputDiv = document.getElementById("outputXml");
+        //var x = document.createElement("TEXTAREA");
+        var button = document.getElementById("myBtn");
+        var inputFile = document.getElementById("myFile");
+        button.style.display = "none";
+        inputFile.style.display = "none";
+        //x.style.width = "100%";
+        //x.style.height = "100%";
+        //x.rows = 100;
+        //x.readOnly = true;
+        //x.disabled = true;
+        //div.appendChild(x);
+        var reader = new FileReader();
+        var fileToRead = document.querySelector("input").files[0];
+        var str = "";
+        reader.addEventListener("loadend", function() {
+          //x.innerHTML = vkbeautify.xml(reader.result);
+          var parser = new DOMParser();
+          str = reader.result;
+          str = str.replace(/>\s*/g, ">"); // Replace "> " with ">"
+          str = str.replace(/\s*</g, "<"); // Replace "< " with "<"
+          xmlObject = parser.parseFromString(str, "text/xml");
+
+          var xmlDoc = vkbeautify.xml(reader.result);
+          var lines = xmlDoc.split("\n");
+          for (var i = 0; i < lines.length; i++) {
+            var x = document.createElement("INPUT");
+            x.setAttribute("type", "text");
+            x.id = "raw"+i;
+            x.disabled = true;
+            x.value = lines[i];
+            x.style.width = "100%";
+            x.innerHTML = lines[i];
+            div.appendChild(x);
+            var y = document.createElement("INPUT");
+            y.setAttribute("type", "text");
+            y.id = "out"+i;
+            y.disabled = true;
+            y.style.width = "100%";
+            outputDiv.appendChild(y);
+          }
+          document.getElementById("raw"+currentLine).style.color = "red";
+
+          addBoilerPlateInXSLT();
+          //addValueAsIs("title", "Song");
+          printXSLT();
+		  setCurrentNode("/");
+          console.log(currentXsltNode);
+          console.log(currentNode);
+          //var forEach = xsltObject.createElement("xsl:for-each");
+          //xsltObject
+          //  .getElementsByTagName("xsl:template")[0]
+          //  .appendChild(forEach)
+          //  .setAttribute("select", "catalog/cd");
+
+          //var song = xsltObject.createElement("Song");
+          //var name = xsltObject.createElement("Name");
+          //var selectTitle = xsltObject.createElement("xsl:value-of");
+          //xsltObject.getElementsByTagName("xsl:for-each")[0].appendChild(song);
+          //xsltObject.getElementsByTagName("Song")[0].appendChild(name);
+          //xsltObject
+           // .getElementsByTagName("Name")[0]
+           // .appendChild(selectTitle)
+           // .setAttribute("select", "title");
+          //console.log(template.childNodes);
+        });
+        reader.readAsText(fileToRead);
+      });
+
+      document.getElementById("add").addEventListener("click", function() {
+        document.getElementById("raw"+currentLine).style.color = "black";
+        var tag = document.getElementById("raw"+currentLine).value;
+	
+		if(tag.startsWith("<?xml")) {
+      		var outLine = processTag(tag);
+      		document.getElementById("out"+currentLine).value = outLine;
+      	} else {
+      		var regexp = "(?<=<)([^\/]*?)((?= \/>)|(?=>))";
+        	console.log("Tag is " + tag.match(regexp));
+      		//updateCurrentNode(tag);
+      	}
+
+      	currentLine++;
+      	document.getElementById("raw"+currentLine).style.color = "red";
+      });
+
+      document.getElementById("asIs").addEventListener("click", function() {
+        var tag = document.getElementById("raw"+currentLine).value;
+        updateCurrentNode(tag);
+        console.log(currentNode.nodeName);
+        console.log(currentNode.nodeType);
+        var tags = currentValueXpath.split("/")
+        var tagName = tags[tags.length-1]
+        addValueAsIs(currentValueXpath,tagName);
+
+        setXsltCurrentNode(currentXpath);
+        console.log("Current Node is "+currentNode.nodeName);
+        console.log("Current XLST Node is "+currentXsltNode.nodeName);
+        console.log("Current XPath is "+currentXpath);
+        console.log("Current Value XPath is "+currentValueXpath);
+      });
+
+      function processTag(tag) {
+      	console.log("Processing "+tag);
+      	if(tag.startsWith("<?xml")) {
+      		return tag;
+      	}
+      }
+
+      function updateCurrentNode(tag) {
+      	console.log("Updating current tag : "+tag);
+        var tagCatcher = /(<.[^(><.)]+>)/g;
+        var xmlTag = tag.match(tagCatcher);
+        var xpaths = currentXpath.split("/");
+        if (xmlTag.length == 1) {
+          if(xmlTag[0] === xpaths[xpaths.length-1]) {
+          		//Do nothing
+          } else {
+          	if (xmlTag[0].startsWith("</")) {
+          		currentXpath = "";
+          		currentValueXpath = "";
+            	for (i = 0; i < xpaths.length - 1; i++) {
+              		currentXpath = currentXpath + "/" + xpaths[i];
+              		currentValueXpath = currentValueXpath + "/" + xmlTag[0].replace("<", "").replace(">", "");
+            	}
+          	} else {
+            	currentXpath = currentXpath + "/" + xmlTag[0].replace("<", "").replace(">", "");
+            	currentValueXpath = currentValueXpath + "/" + xmlTag[0].replace("<", "").replace(">", "");
+          	}
+      	  }
+        } else if(xmlTag.length == 2) {
+        	currentValueXpath = "";
+        	currentValueXpath = currentXpath + "/" + xmlTag[0].replace("<", "").replace(">", "");
+        }
+
+        setCurrentNode(currentXpath);
+      }
+
+      function setCurrentNode(xpath) {
+      	var xpathElems = xpath.split("/");
+      	var node = xmlObject;
+      	for(i=0;i<xpathElems.length;i++) {
+      		if(xpathElems[i] != "") {
+      			console.log("Finding element with name "+xpathElems[i]);
+      			node = node.getElementsByTagName(xpathElems[i])[0];
+      		}
+      	}
+      	currentNode = node;
+      }
+
+      function setXsltCurrentNode(xpath) {
+      	var xpathElems = xpath.split("/");
+      	var node = xsltObject;
+      	for(i=0;i<xpathElems.length;i++) {
+      		if(xpathElems[i] != "") {
+      			console.log("Finding element with name "+xpathElems[i]);
+      			node = node.getElementsByTagName(xpathElems[i])[0];
+      		}
+      	}
+      	currentXsltNode = node;
+      }
+
+      function addBoilerPlateInXSLT() {
+        var boilerPlate =
+          '<?xml version="1.0"?><xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><xsl:template match="/"></xsl:template></xsl:stylesheet>';
+
+        var parser = new DOMParser();
+        xsltObject = parser.parseFromString(boilerPlate, "text/xml");
+        currentXsltNode = xsltObject.getElementsByTagName("xsl:template")[0];
+      }
+
+      function printXSLT() {
+        var xmlText = new XMLSerializer().serializeToString(xsltObject);
+        console.log(xmlText);
+      }
+
+      function addValueAsIs(xsltPath, newTagName) {
+      	console.log("Adding as-is for path "+xsltPath+" and new tag name "+newTagName);
+        var newNode = addElement(newTagName);
+        console.log("Length of children in current node : "+currentNode.childNodes.length);
+        setCurrentNode(currentValueXpath);
+        if(currentNode.childNodes.length == 1)
+        addElementWithAttributeToNode(
+          newNode,
+          "xsl:value-of",
+          "select",
+          xsltPath
+        );
+        printXSLT();
+      }
+
+      function addElement(elementName) {
+        var newNode = xsltObject.createElement(elementName);
+        currentXsltNode.appendChild(newNode);
+        return newNode;
+      }
+
+      function addElementWithAttribute(
+        elementName,
+        attributeName,
+        attributeValue
+      ) {
+        currentXsltNode
+          .appendChild(xsltObject.createElement(elementName))
+          .setAttribute(attributeName, attributeValue);
+      }
+
+      function addElementWithAttributeToNode(
+        node,
+        elementName,
+        attributeName,
+        attributeValue
+      ) {
+        node
+          .appendChild(xsltObject.createElement(elementName))
+          .setAttribute(attributeName, attributeValue);
+      }
+    </script>
+  </body>
+</html>
