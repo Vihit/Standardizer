@@ -20,11 +20,13 @@
       id="buttons"
       style="text-align: center; position: fixed;width:100%;height:500px;margin: auto;top: 50%;"
     >
-      <div><button id="asIs" style="margin: 10px 10px 10px 10px;">As-is</button></div>
+      <div>
+        <button id="asIs" style="margin: 10px 10px 10px 10px;">As-is</button>
+      </div>
       <div>
         <button id="remove">-</button>
         <button id="edit">E</button>
-        <button id="add">+</button>
+        <button id="skip">Skip</button>
       </div>
     </div>
     <div style="width: 100%">
@@ -43,6 +45,7 @@
       var currentXpath = "";
       var currentValueXpath = "";
       var currentXsltNode = null;
+      var totalLines = 0;
 
       document.getElementById("myBtn").addEventListener("click", function() {
         var div = document.getElementById("rawXml");
@@ -71,10 +74,11 @@
 
           var xmlDoc = vkbeautify.xml(reader.result);
           var lines = xmlDoc.split("\n");
+          totalLines = lines.length;
           for (var i = 0; i < lines.length; i++) {
             var x = document.createElement("INPUT");
             x.setAttribute("type", "text");
-            x.id = "raw"+i;
+            x.id = "raw" + i;
             x.disabled = true;
             x.value = lines[i];
             x.style.width = "100%";
@@ -82,17 +86,17 @@
             div.appendChild(x);
             var y = document.createElement("INPUT");
             y.setAttribute("type", "text");
-            y.id = "out"+i;
+            y.id = "out" + i;
             y.disabled = true;
             y.style.width = "100%";
             outputDiv.appendChild(y);
           }
-          document.getElementById("raw"+currentLine).style.color = "red";
+          document.getElementById("raw" + currentLine).style.color = "red";
 
           addBoilerPlateInXSLT();
           //addValueAsIs("title", "Song");
           printXSLT();
-		  setCurrentNode("/");
+          setCurrentNode("/");
           console.log(currentXsltNode);
           console.log(currentNode);
           //var forEach = xsltObject.createElement("xsl:for-each");
@@ -107,105 +111,152 @@
           //xsltObject.getElementsByTagName("xsl:for-each")[0].appendChild(song);
           //xsltObject.getElementsByTagName("Song")[0].appendChild(name);
           //xsltObject
-           // .getElementsByTagName("Name")[0]
-           // .appendChild(selectTitle)
-           // .setAttribute("select", "title");
+          // .getElementsByTagName("Name")[0]
+          // .appendChild(selectTitle)
+          // .setAttribute("select", "title");
           //console.log(template.childNodes);
         });
         reader.readAsText(fileToRead);
       });
 
-      document.getElementById("add").addEventListener("click", function() {
-        document.getElementById("raw"+currentLine).style.color = "black";
-        var tag = document.getElementById("raw"+currentLine).value;
-	
-		if(tag.startsWith("<?xml")) {
-      		var outLine = processTag(tag);
-      		document.getElementById("out"+currentLine).value = outLine;
-      	} else {
-      		var regexp = "(?<=<)([^\/]*?)((?= \/>)|(?=>))";
-        	console.log("Tag is " + tag.match(regexp));
-      		//updateCurrentNode(tag);
-      	}
-
-      	currentLine++;
-      	document.getElementById("raw"+currentLine).style.color = "red";
+      document.getElementById("skip").addEventListener("click", function() {
+        var tag = document.getElementById("raw" + currentLine).value;
+        if (!tag.startsWith("<?xml")) {
+          updateCurrentNode(tag);
+        }
+        nextLine(-1);
       });
 
       document.getElementById("asIs").addEventListener("click", function() {
-        var tag = document.getElementById("raw"+currentLine).value;
-        updateCurrentNode(tag);
-        console.log(currentNode.nodeName);
-        console.log(currentNode.nodeType);
-        var tags = currentValueXpath.split("/")
-        var tagName = tags[tags.length-1]
-        addValueAsIs(currentValueXpath,tagName);
+        var tag = document.getElementById("raw" + currentLine).value;
+        if (!tag.startsWith("<?xml")) {
+          updateCurrentNode(tag);
+          console.log(currentNode.nodeName);
+          console.log(currentNode.nodeType);
+          var tags = currentValueXpath.split("/");
+          var tagName = tags[tags.length - 1];
+          addValueAsIs(currentValueXpath, tagName);
 
-        setXsltCurrentNode(currentXpath);
-        console.log("Current Node is "+currentNode.nodeName);
-        console.log("Current XLST Node is "+currentXsltNode.nodeName);
-        console.log("Current XPath is "+currentXpath);
-        console.log("Current Value XPath is "+currentValueXpath);
+          setXsltCurrentNode(currentXpath);
+        }
+        nextLine(0);
+        console.log("Current Node is " + currentNode.nodeName);
+        console.log("Current XLST Node is " + currentXsltNode.nodeName);
+        console.log("Current XPath is " + currentXpath);
+        console.log("Current Value XPath is " + currentValueXpath);
       });
 
+      function nextLine(prevOperation) {
+        document.getElementById("raw" + currentLine).style.color = "black";
+        var tag = document.getElementById("raw" + currentLine).value;
+
+        if (tag.startsWith("<?xml")) {
+          var outLine = processTag(tag);
+          document.getElementById("out" + currentLine).value = outLine;
+        }
+
+        if (prevOperation == 0) {
+          document.getElementById("out" + currentLine).value = tag;
+          currentLine++;
+        } else if (prevOperation == -1) {
+          var latestXpathNode = currentValueXpath.split("/")[
+            currentValueXpath.split("/").length - 1
+          ];
+          console.log("Removing : " + latestXpathNode);
+          var tagCatcher = /(<.[^(><.)]+>)/g;
+          var text = document.getElementById("raw" + currentLine);
+          var tag = text.value;
+          var xmlTag = tag.match(tagCatcher);
+          if (xmlTag[1] === "</" + latestXpathNode + ">") {
+            text.style.setProperty("text-decoration", "line-through");
+            currentLine++;
+          } else {
+            for (i = currentLine; i < totalLines; i++) {
+              var text = document.getElementById("raw" + i);
+              var tag = text.value;
+              if (tag.trim() === "</" + latestXpathNode + ">") {
+                console.log("Matching closing tag found " + i);
+                text.style.setProperty("text-decoration", "line-through");
+                currentLine = i + 1;
+                break;
+              } else {
+                text.style.setProperty("text-decoration", "line-through");
+              }
+            }
+          }
+        }
+
+        document.getElementById("raw" + currentLine).style.color = "red";
+      }
+
       function processTag(tag) {
-      	console.log("Processing "+tag);
-      	if(tag.startsWith("<?xml")) {
-      		return tag;
-      	}
+        console.log("Processing " + tag);
+        if (tag.startsWith("<?xml")) {
+          return tag;
+        }
       }
 
       function updateCurrentNode(tag) {
-      	console.log("Updating current tag : "+tag);
+        console.log("Updating current tag : " + tag);
         var tagCatcher = /(<.[^(><.)]+>)/g;
         var xmlTag = tag.match(tagCatcher);
         var xpaths = currentXpath.split("/");
-        if (xmlTag.length == 1) {
-          if(xmlTag[0] === xpaths[xpaths.length-1]) {
-          		//Do nothing
+        if (xmlTag.length == 1 && xmlTag != null) {
+          if (xmlTag[0] === xpaths[xpaths.length - 1]) {
+            //Do nothing
           } else {
-          	if (xmlTag[0].startsWith("</")) {
-          		currentXpath = "";
-          		currentValueXpath = "";
-            	for (i = 0; i < xpaths.length - 1; i++) {
-              		currentXpath = currentXpath + "/" + xpaths[i];
-              		currentValueXpath = currentValueXpath + "/" + xmlTag[0].replace("<", "").replace(">", "");
-            	}
-          	} else {
-            	currentXpath = currentXpath + "/" + xmlTag[0].replace("<", "").replace(">", "");
-            	currentValueXpath = currentValueXpath + "/" + xmlTag[0].replace("<", "").replace(">", "");
-          	}
-      	  }
-        } else if(xmlTag.length == 2) {
-        	currentValueXpath = "";
-        	currentValueXpath = currentXpath + "/" + xmlTag[0].replace("<", "").replace(">", "");
+            if (xmlTag[0].startsWith("</")) {
+              currentXpath = "";
+              currentValueXpath = "";
+              for (i = 0; i < xpaths.length - 1; i++) {
+                currentXpath = currentXpath + "/" + xpaths[i];
+                currentValueXpath =
+                  currentValueXpath +
+                  "/" +
+                  xmlTag[0].replace("<", "").replace(">", "");
+              }
+            } else {
+              currentXpath =
+                currentXpath +
+                "/" +
+                xmlTag[0].replace("<", "").replace(">", "");
+              currentValueXpath =
+                currentValueXpath +
+                "/" +
+                xmlTag[0].replace("<", "").replace(">", "");
+            }
+          }
+        } else if (xmlTag.length == 2) {
+          currentValueXpath = "";
+          currentValueXpath =
+            currentXpath + "/" + xmlTag[0].replace("<", "").replace(">", "");
         }
 
         setCurrentNode(currentXpath);
       }
 
       function setCurrentNode(xpath) {
-      	var xpathElems = xpath.split("/");
-      	var node = xmlObject;
-      	for(i=0;i<xpathElems.length;i++) {
-      		if(xpathElems[i] != "") {
-      			console.log("Finding element with name "+xpathElems[i]);
-      			node = node.getElementsByTagName(xpathElems[i])[0];
-      		}
-      	}
-      	currentNode = node;
+        var xpathElems = xpath.split("/");
+        var node = xmlObject;
+        for (i = 0; i < xpathElems.length; i++) {
+          if (xpathElems[i] != "") {
+            console.log("Finding element with name " + xpathElems[i]);
+            node = node.getElementsByTagName(xpathElems[i])[0];
+          }
+        }
+        currentNode = node;
       }
 
       function setXsltCurrentNode(xpath) {
-      	var xpathElems = xpath.split("/");
-      	var node = xsltObject;
-      	for(i=0;i<xpathElems.length;i++) {
-      		if(xpathElems[i] != "") {
-      			console.log("Finding element with name "+xpathElems[i]);
-      			node = node.getElementsByTagName(xpathElems[i])[0];
-      		}
-      	}
-      	currentXsltNode = node;
+        var xpathElems = xpath.split("/");
+        var node = xsltObject;
+        for (i = 0; i < xpathElems.length; i++) {
+          if (xpathElems[i] != "") {
+            console.log("Finding element with name " + xpathElems[i]);
+            node = node.getElementsByTagName(xpathElems[i])[0];
+          }
+        }
+        currentXsltNode = node;
       }
 
       function addBoilerPlateInXSLT() {
@@ -223,17 +274,25 @@
       }
 
       function addValueAsIs(xsltPath, newTagName) {
-      	console.log("Adding as-is for path "+xsltPath+" and new tag name "+newTagName);
-        var newNode = addElement(newTagName);
-        console.log("Length of children in current node : "+currentNode.childNodes.length);
-        setCurrentNode(currentValueXpath);
-        if(currentNode.childNodes.length == 1)
-        addElementWithAttributeToNode(
-          newNode,
-          "xsl:value-of",
-          "select",
-          xsltPath
+        console.log(
+          "Adding as-is for path " +
+            xsltPath +
+            " and new tag name " +
+            newTagName
         );
+        var newNode = addElement(newTagName);
+        console.log(
+          "Length of children in current node : " +
+            currentNode.childNodes.length
+        );
+        setCurrentNode(currentValueXpath);
+        if (currentNode.childNodes.length == 1)
+          addElementWithAttributeToNode(
+            newNode,
+            "xsl:value-of",
+            "select",
+            xsltPath
+          );
         printXSLT();
       }
 
